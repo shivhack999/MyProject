@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const Blacklist = require('../models/blacklistModel');
 require('dotenv').config();
 const varifyToken = async (req,res,next) =>{
     const token = req.body.token || req.query.token || req.headers["authorization"];
@@ -12,7 +13,15 @@ const varifyToken = async (req,res,next) =>{
     try {
         
         const tokenSplit = token.split(' ');
-        secretToken = tokenSplit[1];
+        const secretToken = tokenSplit[1];
+        const blacklistedToken = await Blacklist.findOne({token:secretToken});
+        if(blacklistedToken){
+            return res.status(400).json({
+                success:false,
+                msg:'This session has expired, Please try again!',
+            });
+        }
+
         const secretKey = process.env.JWT_SECRET;
         const decodedData = jwt.verify(secretToken,secretKey);
         req.user = decodedData;

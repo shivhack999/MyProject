@@ -6,6 +6,16 @@ const users = require("../models/userModel");
 const Blacklist = require("../models/blacklistModel");
 const {validationResult} = require('express-validator');
 const {deleteFile} = require('../helpers/deleteFile');
+// const {otpSender} = require('../helpers/otpSender');
+
+const otpGenerator = require('otp-generator');
+const otpModel = require('../models/otpModel');
+const twilio = require('twilio');
+const { otpVerification } = require("../helpers/otpValidate");
+const TAT = process.env.TWILIO_AUTH_TOKEN;
+const TAS = process.env.TWILIO_ACCOUNT_SID;
+const TPN = process.env.TWILIO_PHONE_NUMBER;
+
 const userRegisterController = async (req, res) => {
     try {
       const {name,mobile,password} = req.body;
@@ -18,7 +28,7 @@ const userRegisterController = async (req, res) => {
         })
       } 
       const preuser = await users.findOne({ mobile: mobile });
-      console.log(preuser);
+      // console.log(preuser);
       if (preuser) {
         res.status(404).json({ 
           success:false,
@@ -36,7 +46,7 @@ const userRegisterController = async (req, res) => {
         profile:"",
         token : "",
       });
-      console.log(addUser);
+      // console.log(addUser);
       await addUser.save();
       res.status(200).json({ 
         success:true,
@@ -47,7 +57,7 @@ const userRegisterController = async (req, res) => {
         // tokenType:'Bearer'
        });
     } catch (error) {
-      console.log(error.message);
+      // console.log(error.message);
       return res.status(500).json({
         success:false,
         msg:error.message
@@ -113,7 +123,7 @@ const userRegisterController = async (req, res) => {
     }
   };
   const userProfileController = async (req, res) => {
-    console.log(req.user)
+    // console.log(req.user)
     try {
       return res.status(200).json({
         success:true,
@@ -153,7 +163,7 @@ const userRegisterController = async (req, res) => {
         deleteFile(oldFile);
 
       }
-      console.log("id" + req.user.userData._id);
+      // console.log("id" + req.user.userData._id);
       const userData = await users.findByIdAndUpdate(
         { _id: userId },{ $set: data,},{new:true} // new : true is return updated value
       );
@@ -219,11 +229,77 @@ const userRegisterController = async (req, res) => {
 
     }
   };
+
+  const twilioClient = new twilio(TAS,TAT);
+  const sendOTPController = async (req, res) =>{
+    try {
+      // console.log(req.body.mobile);
+      let mobile = req.body.mobile;
+      const otp = otpGenerator.generate(6, {upperCaseAlphabets:false,lowerCaseAlphabets:false, specialChars:false});
+      const cDate = new Date();
+      await otpModel.findOneAndUpdate(
+          {mobile},
+          {otp, otpExpiration: new Date(cDate.getTime()) },
+          {upsert:true, new:true, setDefaultsOnInsert: true }
+      );
+      await twilioClient.messages.create({
+        body: `Your Verification OTP is ${otp}`,
+        to: mobile,
+        from : TPN
+      });
+      return res.status(200).json({
+        success: true,
+        msg: "OTP Sent Successfully ",
+        otp: otp
+      });
+
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        msg: error.message,
+      });
+    }
+  };
+
+  const verifyOTPController = async(req,res) =>{
+    try {
+      const {mobile, otp} = req.body;
+      const otpData = await otpModel.findOne({
+        mobile,
+        otp
+      });
+      if(!otpData){
+        return res.status(400).json({
+          success: false,
+          msg: 'You eneterd wrong OTP!',
+        });
+      }
+      const isOtpExpired = await otpVerification(otpData.otpExpiration);
+      if(isOtpExpired){
+        return res.status(400).json({
+          success: false,
+          msg: 'Your OTP has been Expired!'
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        msg: 'OTP Varification Successfully!',
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        msg: error.message,
+      });
+    }
+    
+  };
     module.exports = {
     userRegisterController,
     userLoginController,
     userProfileController,
     updateProfileController,
     refreshTokenController,
-    logoutController
+    logoutController,
+    sendOTPController,
+    verifyOTPController
   }

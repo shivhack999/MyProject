@@ -24,4 +24,6 @@ router.get("/profile", authMiddleware, userController.userProfileController);
 router.post("/updateProfile", authMiddleware, updateProfileValidator, userController.updateProfileController );
 router.get("/refreshToken", authMiddleware, userController.refreshTokenController);
 router.get("/logout", authMiddleware, userController.logoutController);
+router.post("/sendOTP", userController.sendOTPController);
+router.post("/verifyOTP", userController.verifyOTPController);
 module.exports = router;
