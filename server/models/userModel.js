@@ -23,16 +23,9 @@ const userSchema = mongoose.Schema({
     profile:{
         type:String
     },
-    token:{
-        type:String
-    },
     e_varified:{
         type:Number,
         default:0 
-    },
-    m_varified:{
-        type:Number,
-        default:0
     }
 });
 

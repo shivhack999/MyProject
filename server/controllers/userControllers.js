@@ -1,4 +1,3 @@
-const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 require('dotenv').config();
@@ -6,19 +5,26 @@ const users = require("../models/userModel");
 const Blacklist = require("../models/blacklistModel");
 const {validationResult} = require('express-validator');
 const {deleteFile} = require('../helpers/deleteFile');
-// const {otpSender} = require('../helpers/otpSender');
-
+const {otpSender} = require('../helpers/otpSender');
 const otpGenerator = require('otp-generator');
 const otpModel = require('../models/otpModel');
-const twilio = require('twilio');
-const { otpVerification } = require("../helpers/otpValidate");
-const TAT = process.env.TWILIO_AUTH_TOKEN;
-const TAS = process.env.TWILIO_ACCOUNT_SID;
-const TPN = process.env.TWILIO_PHONE_NUMBER;
 
+const { otpVerification } = require("../helpers/otpValidate");
+
+
+
+const generateAccessToken = async (user) =>{
+  const token = jwt.sign(user, process.env.JWT_SECRET, {expiresIn:"2h"});
+  return token;
+}
+
+const generateRefreshToken = async (user) =>{
+  const token = jwt.sign(user, process.env.JWT_SECRET, {expiresIn:"24h"});
+  return token;
+}
 const userRegisterController = async (req, res) => {
     try {
-      const {name,mobile,password} = req.body;
+      const {name,mobile,password,email} = req.body;
       const errors = validationResult(req);
       if(!errors.isEmpty()){
         return res.status(500).json({
@@ -41,39 +47,32 @@ const userRegisterController = async (req, res) => {
         fullName:name,
         mobile,
         password: hashedPassword,
-        email:"",
+        email,
         gender:"",
-        profile:"",
-        token : "",
+        profile:""
       });
       // console.log(addUser);
       await addUser.save();
+      const accessToken = await generateAccessToken({ user:addUser });
+      const refreshToken = await generateRefreshToken({ user:addUser });
       res.status(200).json({ 
         success:true,
         msg:'Registation Successfully',
-        user:addUser,
-        // accessToken:accessToken,
-        // refreshToken:refreshToken,
-        // tokenType:'Bearer'
+        name:name,
+        mobile:mobile,
+        email:email,
+        accessToken:accessToken,
+        refreshToken:refreshToken,
+        tokenType:'Bearer'
        });
     } catch (error) {
       // console.log(error.message);
-      return res.status(500).json({
+      return res.status(400).json({
         success:false,
         msg:error.message
       });
     }
   };
-
-  const generateAccessToken = async (user) =>{
-    const token = jwt.sign(user, process.env.JWT_SECRET, {expiresIn:"2h"});
-    return token;
-  }
-  
-  const generateRefreshToken = async (user) =>{
-    const token = jwt.sign(user, process.env.JWT_SECRET, {expiresIn:"24h"});
-    return token;
-  }
 
   const userLoginController = async (req, res) => {
     try {
@@ -230,11 +229,19 @@ const userRegisterController = async (req, res) => {
     }
   };
 
-  const twilioClient = new twilio(TAS,TAT);
+
   const sendOTPController = async (req, res) =>{
     try {
       // console.log(req.body.mobile);
       let mobile = req.body.mobile;
+      const preuser = await users.findOne({ mobile: mobile });
+      // console.log(preuser);
+      if (preuser) {
+        res.status(404).json({ 
+          success:false,
+          error: "Already Register Mobile Number." 
+        });
+      }
       const otp = otpGenerator.generate(6, {upperCaseAlphabets:false,lowerCaseAlphabets:false, specialChars:false});
       const cDate = new Date();
       await otpModel.findOneAndUpdate(
@@ -242,17 +249,17 @@ const userRegisterController = async (req, res) => {
           {otp, otpExpiration: new Date(cDate.getTime()) },
           {upsert:true, new:true, setDefaultsOnInsert: true }
       );
-      await twilioClient.messages.create({
-        body: `Your Verification OTP is ${otp}`,
-        to: mobile,
-        from : TPN
+      if(otpSender(mobile, otp)){
+        return res.status(200).json({
+          success: true,
+          msg: "OTP Sent Successfully ",
+          otp: otp
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        msg: "Somthing is missing Please try again",
       });
-      return res.status(200).json({
-        success: true,
-        msg: "OTP Sent Successfully ",
-        otp: otp
-      });
-
     } catch (error) {
       return res.status(400).json({
         success: false,

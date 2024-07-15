@@ -1,12 +1,10 @@
 const otpVerification = async (otpTime) =>{
     try {
-        console.log("MS " + otpTime);
-
         const cDateTime = new Date();
         let differenceValue = (otpTime - cDateTime.getTime()) / 1000;
         differenceValue /= 60;
         const minutes = Math.abs(differenceValue);
-        console.log(minutes);
+        // console.log(minutes);
         if(minutes > 2){
             return true;
         }

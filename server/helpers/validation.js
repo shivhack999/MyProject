@@ -14,6 +14,7 @@ exports.ragistrationValidator = [
         minSymbols:1,
         minNumbers:1
     }),
+    
 ];
 exports.loginValidator = [
     check('logMobile','Mobile No. should be contains 10 digits').isLength({
